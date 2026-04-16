@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 FCCS - Four Corners Community Services
-Day Habilitation Service Report Platform - MULTI-USER WITH WORKFLOW
-Features: User isolation, Submit for Review, Supervisor Approval, PDF generation
+Day Habilitation Service Report Platform - COMPLETE WORKFLOW SYSTEM
+Fixed: Add Member, Reject returns to original staff, Supervisor comments, Logo background
 """
 
 import os
@@ -25,7 +25,6 @@ CORS(app)
 
 DATA_FILE = 'fccs_data.json'
 
-# Your actual data
 MENTORS_LIST = [
     "AMADU DRAH", "EVELYN PINTO", "ANDRES GOMEZ", "VELONICAH NYABUTO",
     "ABIGAIL GYAMFI", "GENESIS MALENA TACLE", "BENJAMIN TWENWBOOAH", "HOPE SENOO",
@@ -66,16 +65,17 @@ def load_data():
     else:
         data = {}
     
-    # Ensure all required keys exist with defaults
     if 'users' not in data or not data['users']:
         data['users'] = [
             {'id': 1, 'username': 'admin', 'password': generate_password_hash('admin123'), 'role': 'admin'},
             {'id': 2, 'username': 'supervisor', 'password': generate_password_hash('super123'), 'role': 'supervisor'},
-            {'id': 3, 'username': 'staff1', 'password': generate_password_hash('staff123'), 'role': 'staff'}
+            {'id': 3, 'username': 'staff1', 'password': generate_password_hash('staff123'), 'role': 'staff'},
+            {'id': 4, 'username': 'qa', 'password': generate_password_hash('qa123'), 'role': 'staff'}
         ]
     
     if 'members' not in data or not data['members']:
         data['members'] = [{'id': i+1, 'full_name': m, 'display_name': m.split()[0], 'date_of_birth': '', 'medicaid_id': '', 'phone': '', 'emergency_contact': '', 'address': '', 'is_active': True} for i, m in enumerate(MEMBERS_LIST)]
+    
     if 'mentors' not in data or not data['mentors']:
         data['mentors'] = [{'id': i+1, 'full_name': m, 'is_active': True} for i, m in enumerate(MENTORS_LIST)]
     if 'locations' not in data or not data['locations']:
@@ -103,18 +103,16 @@ def load_data():
                 data['isp_outcomes'].append({'id': len(data['isp_outcomes'])+1, 'member_id': member['id'], 'outcome_text': f"{member['full_name']} will engage in community activities and socialize with peers.", 'is_active': True})
                 data['isp_outcomes'].append({'id': len(data['isp_outcomes'])+1, 'member_id': member['id'], 'outcome_text': f"{member['full_name']} will develop independent living skills.", 'is_active': True})
     
-    # NEW: User-specific drafts and workflow
     if 'user_drafts' not in data:
-        data['user_drafts'] = {}  # username -> list of draft reports
-    
+        data['user_drafts'] = {}
     if 'submitted_reports' not in data:
-        data['submitted_reports'] = []  # Reports awaiting review
-    
+        data['submitted_reports'] = []
     if 'approved_reports' not in data:
-        data['approved_reports'] = []  # Approved reports
-    
+        data['approved_reports'] = []
     if 'next_report_id' not in data:
         data['next_report_id'] = 1
+    if 'next_member_id' not in data:
+        data['next_member_id'] = max([m['id'] for m in data['members']] + [0]) + 1
     
     return data
 
@@ -131,17 +129,67 @@ LOGIN_TEMPLATE = '''
     <title>FCCS - Four Corners Community Services</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #1a3a5c 0%, #2c5aa0 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .login-box { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 400px; }
+        body {
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: linear-gradient(135deg, #1a3a5c 0%, #2c5aa0 100%);
+        }
+        .logo-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.08;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .logo-background svg {
+            width: 600px;
+            height: 600px;
+        }
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 400px;
+            position: relative;
+            z-index: 10;
+        }
         h1 { text-align: center; color: #1a3a5c; font-size: 24px; }
         .fccs-full { text-align: center; color: #2c5aa0; margin-bottom: 5px; font-weight: bold; }
+        .logo-icon { text-align: center; margin-bottom: 15px; }
+        .logo-icon svg { width: 80px; height: 80px; }
         input, select { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; }
         button { width: 100%; padding: 14px; background: #2c5aa0; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
         .demo-accounts { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 8px; font-size: 12px; }
     </style>
 </head>
 <body>
+    <div class="logo-background">
+        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="100" cy="100" r="90" fill="#1a3a5c" opacity="0.3"/>
+            <circle cx="100" cy="100" r="70" fill="#2c5aa0" opacity="0.3"/>
+            <text x="100" y="110" font-size="60" text-anchor="middle" fill="white" font-weight="bold" opacity="0.5">FCCS</text>
+            <text x="100" y="140" font-size="16" text-anchor="middle" fill="white" opacity="0.5">Four Corners</text>
+            <text x="100" y="160" font-size="14" text-anchor="middle" fill="white" opacity="0.5">Community Services</text>
+        </svg>
+    </div>
     <div class="login-box">
+        <div class="logo-icon">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" fill="#1a3a5c"/>
+                <text x="50" y="65" font-size="35" text-anchor="middle" fill="white" font-weight="bold">F</text>
+            </svg>
+        </div>
         <h1>📋 FCCS</h1>
         <p class="fccs-full">Four Corners Community Services</p>
         <p style="text-align:center; color:#666; margin-bottom:20px;">Day Habilitation Reports</p>
@@ -154,6 +202,7 @@ LOGIN_TEMPLATE = '''
             <strong>Demo Accounts:</strong><br>
             Admin: admin / admin123<br>
             Supervisor: supervisor / super123<br>
+            QA Staff: qa / qa123<br>
             Staff: staff1 / staff123
         </div>
     </div>
@@ -224,14 +273,16 @@ MAIN_APP_TEMPLATE = '''
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; }
         .outcome-item { background: #f8f9fa; padding: 10px; margin-bottom: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
         .outcome-text { flex: 1; margin-right: 10px; }
-        .workflow-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .workflow-tab { padding: 10px 20px; background: #ddd; border: none; border-radius: 6px; cursor: pointer; }
-        .workflow-tab.active { background: #1a3a5c; color: white; }
         .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
         .status-draft { background: #f39c12; color: white; }
         .status-submitted { background: #3498db; color: white; }
         .status-approved { background: #27ae60; color: white; }
+        .status-rejected { background: #e74c3c; color: white; }
         .user-info { background: #2c5aa0; color: white; padding: 5px 15px; border-radius: 20px; font-size: 14px; }
+        .comment-box { background: #fff3cd; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #f39c12; }
+        .comment-item { background: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 6px; }
+        .comment-author { font-weight: bold; color: #2c5aa0; }
+        .comment-time { font-size: 11px; color: #999; }
     </style>
 </head>
 <body>
@@ -367,6 +418,25 @@ MAIN_APP_TEMPLATE = '''
         </div>
     </div>
     
+    <!-- Add Member Modal -->
+    <div class="modal-overlay" id="addMemberModalOverlay" onclick="closeAddMemberModal()"></div>
+    <div class="modal" id="addMemberModal">
+        <h3>Add New Member</h3>
+        <form id="addMemberForm">
+            <div class="form-group"><label>Full Name *</label><input type="text" id="newFullName" required></div>
+            <div class="form-group"><label>Display Name</label><input type="text" id="newDisplayName"></div>
+            <div class="form-group"><label>Date of Birth</label><input type="date" id="newDOB"></div>
+            <div class="form-group"><label>Medicaid ID</label><input type="text" id="newMedicaidId"></div>
+            <div class="form-group"><label>Phone</label><input type="text" id="newPhone"></div>
+            <div class="form-group"><label>Emergency Contact</label><input type="text" id="newEmergencyContact"></div>
+            <div class="form-group"><label>Address</label><textarea id="newAddress" rows="2"></textarea></div>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button type="submit" class="green">Add Member</button>
+                <button type="button" onclick="closeAddMemberModal()" class="red">Cancel</button>
+            </div>
+        </form>
+    </div>
+    
     <!-- ISP Outcomes Modal -->
     <div class="modal-overlay" id="outcomesModalOverlay" onclick="closeOutcomesModal()"></div>
     <div class="modal" id="outcomesModal">
@@ -406,7 +476,8 @@ MAIN_APP_TEMPLATE = '''
         let allData = { members: [], mentors: [], locations: [], activities: [], promptLevels: [], taskCategories: [], strategies: [], unitOptions: [], serviceTypes: [], medicationStatuses: [], medicationTypes: [] };
         let currentMemberId = null;
         let currentUser = { username: '', role: '' };
-        let editingReportId = null;
+        let currentViewReportId = null;
+        let currentViewReportType = null;
         
         async function loadCurrentUser() {
             const response = await fetch('/api/current-user');
@@ -414,7 +485,6 @@ MAIN_APP_TEMPLATE = '''
             currentUser = data;
             document.getElementById('currentUserDisplay').innerHTML = `👤 ${currentUser.username} (${currentUser.role})`;
             
-            // Show/hide admin panel based on role
             if (currentUser.role !== 'admin') {
                 document.getElementById('navAdmin').style.display = 'none';
             }
@@ -528,6 +598,41 @@ MAIN_APP_TEMPLATE = '''
                 closeModal();
                 location.reload();
             } catch (e) { alert('Error'); }
+        });
+        
+        function showAddMemberForm() {
+            document.getElementById('addMemberForm').reset();
+            document.getElementById('addMemberModal').style.display = 'block';
+            document.getElementById('addMemberModalOverlay').style.display = 'block';
+        }
+        
+        function closeAddMemberModal() {
+            document.getElementById('addMemberModal').style.display = 'none';
+            document.getElementById('addMemberModalOverlay').style.display = 'none';
+        }
+        
+        document.getElementById('addMemberForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                full_name: document.getElementById('newFullName').value,
+                display_name: document.getElementById('newDisplayName').value || document.getElementById('newFullName').value.split()[0],
+                date_of_birth: document.getElementById('newDOB').value,
+                medicaid_id: document.getElementById('newMedicaidId').value,
+                phone: document.getElementById('newPhone').value,
+                emergency_contact: document.getElementById('newEmergencyContact').value,
+                address: document.getElementById('newAddress').value
+            };
+            
+            try {
+                const response = await fetch('/api/members', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Member added!');
+                    closeAddMemberModal();
+                    loadAllData();
+                    loadMembersList();
+                }
+            } catch (e) { alert('Error adding member'); }
         });
         
         function calculateUnits() {
@@ -656,7 +761,6 @@ MAIN_APP_TEMPLATE = '''
             addTask();
             calculateUnits();
             updateSignaturePreview();
-            editingReportId = null;
         }
         
         async function loadDrafts() {
@@ -681,14 +785,18 @@ MAIN_APP_TEMPLATE = '''
             const response = await fetch('/api/submitted');
             const data = await response.json();
             
-            let html = '<table><tr><th>Date</th><th>Member</th><th>Mentor</th><th>Submitted By</th><th>Units</th><th>Actions</th></tr>';
+            let html = '<table><tr><th>Date</th><th>Member</th><th>Mentor</th><th>Submitted By</th><th>Units</th><th>Status</th><th>Actions</th></tr>';
             data.data.forEach(r => {
+                const statusBadge = r.status === 'rejected' ? 'status-rejected' : 'status-submitted';
+                const statusText = r.status === 'rejected' ? 'REJECTED' : 'PENDING';
+                
                 html += `<tr><td>${r.service_date}</td><td>${r.member_name}</td><td>${r.mentor_name}</td><td>${r.submitted_by || 'Unknown'}</td><td>${r.units}</td>
+                    <td><span class="status-badge ${statusBadge}">${statusText}</span></td>
                     <td>
                         <button onclick="viewReport(${r.id}, 'submitted')" class="blue">👁️ View</button>`;
                 if (currentUser.role === 'supervisor' || currentUser.role === 'admin') {
                     html += `<button onclick="approveReport(${r.id})" class="green">✅ Approve</button>
-                             <button onclick="rejectReport(${r.id})" class="red">❌ Reject</button>`;
+                             <button onclick="showRejectComment(${r.id})" class="red">❌ Reject</button>`;
                 }
                 html += `</td></tr>`;
             });
@@ -713,6 +821,9 @@ MAIN_APP_TEMPLATE = '''
         }
         
         async function viewReport(id, type) {
+            currentViewReportId = id;
+            currentViewReportType = type;
+            
             let url = '/api/report/';
             if (type === 'draft') url += `draft/${id}`;
             else if (type === 'submitted') url += `submitted/${id}`;
@@ -748,9 +859,81 @@ MAIN_APP_TEMPLATE = '''
                 </div>`;
             });
             
+            // Show comments if any
+            if (report.comments && report.comments.length > 0) {
+                html += `<h4 style="margin-top:20px;">Comments:</h4>`;
+                report.comments.forEach(c => {
+                    html += `<div class="comment-item">
+                        <span class="comment-author">${c.author}</span>
+                        <span class="comment-time">${c.time}</span>
+                        <p style="margin-top:5px;">${c.text}</p>
+                    </div>`;
+                });
+            }
+            
+            // Add comment box for supervisor viewing submitted reports
+            if (type === 'submitted' && (currentUser.role === 'supervisor' || currentUser.role === 'admin')) {
+                html += `
+                    <div style="margin-top:20px;">
+                        <label><strong>Add Comment:</strong></label>
+                        <textarea id="supervisorComment" rows="3" style="width:100%; padding:10px; margin-top:5px;" placeholder="Enter feedback or corrections needed..."></textarea>
+                        <div style="display:flex; gap:10px; margin-top:10px;">
+                            <button onclick="addCommentAndReject(${id})" class="red">❌ Reject with Comment</button>
+                            <button onclick="addCommentOnly(${id})" class="blue">💬 Add Comment Only</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
             document.getElementById('viewModalContent').innerHTML = html;
             document.getElementById('viewModal').style.display = 'block';
             document.getElementById('viewModalOverlay').style.display = 'block';
+        }
+        
+        async function addCommentOnly(reportId) {
+            const comment = document.getElementById('supervisorComment')?.value;
+            if (!comment) { alert('Please enter a comment'); return; }
+            
+            await fetch(`/api/report/submitted/${reportId}/comment`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({comment})
+            });
+            alert('Comment added!');
+            closeViewModal();
+            loadSubmitted();
+        }
+        
+        async function addCommentAndReject(reportId) {
+            const comment = document.getElementById('supervisorComment')?.value;
+            if (!comment) { alert('Please enter a comment explaining the rejection'); return; }
+            
+            await fetch(`/api/reject/${reportId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({comment})
+            });
+            alert('Report rejected and returned to staff with your comment.');
+            closeViewModal();
+            loadSubmitted();
+        }
+        
+        function showRejectComment(reportId) {
+            currentViewReportId = reportId;
+            const comment = prompt('Enter reason for rejection (this will be sent to the staff member):');
+            if (comment) {
+                rejectReportWithComment(reportId, comment);
+            }
+        }
+        
+        async function rejectReportWithComment(reportId, comment) {
+            await fetch(`/api/reject/${reportId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({comment})
+            });
+            alert('Report rejected and returned to staff.');
+            loadSubmitted();
         }
         
         function closeViewModal() {
@@ -766,14 +949,6 @@ MAIN_APP_TEMPLATE = '''
             loadApproved();
         }
         
-        async function rejectReport(id) {
-            if (!confirm('Reject this report? It will be returned to drafts.')) return;
-            await fetch(`/api/reject/${id}`, { method: 'POST' });
-            alert('Report rejected and returned to drafts.');
-            loadSubmitted();
-            loadDrafts();
-        }
-        
         async function downloadPDF(id) {
             window.open(`/api/approved/${id}/pdf`, '_blank');
         }
@@ -783,7 +958,6 @@ MAIN_APP_TEMPLATE = '''
             const data = await response.json();
             const report = data.data;
             
-            // Populate form
             document.getElementById('memberId').value = report.member_id;
             document.getElementById('mentorId').value = report.mentor_id;
             document.getElementById('serviceDate').value = report.service_date;
@@ -793,13 +967,11 @@ MAIN_APP_TEMPLATE = '''
             document.getElementById('locationId').value = report.location_id;
             document.getElementById('medicationStatus').value = allData.medicationStatuses.find(s => s.status_name === report.medication_status)?.id || '';
             
-            // Load outcomes and set
             await loadMemberDetails();
             setTimeout(() => {
                 document.getElementById('ispOutcomeId').value = report.isp_outcome_id;
             }, 500);
             
-            // Clear and add tasks
             document.getElementById('tasksList').innerHTML = '';
             taskCount = 1;
             report.tasks.forEach(task => {
@@ -814,7 +986,6 @@ MAIN_APP_TEMPLATE = '''
                 }, 100);
             });
             
-            editingReportId = id;
             showSection('new');
         }
         
@@ -971,7 +1142,6 @@ MAIN_APP_TEMPLATE = '''
         
         async function logout() { await fetch('/api/logout', {method: 'POST'}); window.location.href = '/'; }
         
-        // Initialize
         document.getElementById('serviceDate').value = new Date().toISOString().split('T')[0];
         document.getElementById('startTime').addEventListener('change', calculateUnits);
         document.getElementById('endTime').addEventListener('change', calculateUnits);
@@ -1016,9 +1186,37 @@ def api_logout():
 def current_user():
     return jsonify({'username': session.get('username', ''), 'role': session.get('role', '')})
 
-@app.route('/api/members')
+@app.route('/api/members', methods=['GET'])
 def get_members():
     return jsonify({'success': True, 'data': load_data()['members']})
+
+@app.route('/api/members', methods=['POST'])
+def add_member():
+    data = request.json
+    app_data = load_data()
+    
+    new_id = app_data.get('next_member_id', max([m['id'] for m in app_data['members']] + [0]) + 1)
+    member = {
+        'id': new_id,
+        'full_name': data['full_name'],
+        'display_name': data.get('display_name', data['full_name'].split()[0]),
+        'date_of_birth': data.get('date_of_birth', ''),
+        'medicaid_id': data.get('medicaid_id', ''),
+        'phone': data.get('phone', ''),
+        'emergency_contact': data.get('emergency_contact', ''),
+        'address': data.get('address', ''),
+        'is_active': True
+    }
+    app_data['members'].append(member)
+    app_data['next_member_id'] = new_id + 1
+    
+    # Add default ISP outcomes
+    next_outcome_id = max([o['id'] for o in app_data['isp_outcomes']] + [0]) + 1
+    app_data['isp_outcomes'].append({'id': next_outcome_id, 'member_id': new_id, 'outcome_text': f"{member['full_name']} will engage in community activities and socialize with peers.", 'is_active': True})
+    app_data['isp_outcomes'].append({'id': next_outcome_id + 1, 'member_id': new_id, 'outcome_text': f"{member['full_name']} will develop independent living skills.", 'is_active': True})
+    
+    save_data(app_data)
+    return jsonify({'success': True, 'id': new_id})
 
 @app.route('/api/members/<int:id>', methods=['PUT'])
 def update_member(id):
@@ -1116,7 +1314,6 @@ def get_strategies():
 def get_unit_options():
     return jsonify({'success': True, 'data': load_data()['unit_options']})
 
-# Draft routes
 @app.route('/api/drafts', methods=['GET'])
 def get_drafts():
     app_data = load_data()
@@ -1134,7 +1331,7 @@ def save_draft():
         app_data['user_drafts'][username] = []
     
     draft_id = len(app_data['user_drafts'][username]) + 1
-    draft = {'id': draft_id, **data, 'status': 'draft', 'created_by': username, 'created_at': datetime.now().isoformat()}
+    draft = {'id': draft_id, **data, 'status': 'draft', 'created_by': username, 'created_at': datetime.now().isoformat(), 'comments': []}
     app_data['user_drafts'][username].append(draft)
     save_data(app_data)
     return jsonify({'success': True, 'id': draft_id})
@@ -1169,6 +1366,7 @@ def submit_draft(id):
         draft['status'] = 'submitted'
         draft['submitted_by'] = username
         draft['submitted_at'] = datetime.now().isoformat()
+        draft['original_owner'] = username
         app_data['submitted_reports'].append(draft)
         app_data['user_drafts'][username] = [d for d in drafts if d['id'] != id]
         save_data(app_data)
@@ -1186,7 +1384,9 @@ def submit_for_review():
         **data,
         'status': 'submitted',
         'submitted_by': username,
-        'submitted_at': datetime.now().isoformat()
+        'original_owner': username,
+        'submitted_at': datetime.now().isoformat(),
+        'comments': []
     }
     app_data['next_report_id'] += 1
     app_data['submitted_reports'].append(report)
@@ -1206,6 +1406,24 @@ def get_submitted_report(id):
         return jsonify(report)
     return jsonify({'error': 'Not found'}), 404
 
+@app.route('/api/report/submitted/<int:id>/comment', methods=['POST'])
+def add_comment(id):
+    data = request.json
+    app_data = load_data()
+    report = next((r for r in app_data['submitted_reports'] if r['id'] == id), None)
+    
+    if report:
+        if 'comments' not in report:
+            report['comments'] = []
+        report['comments'].append({
+            'author': session.get('username', ''),
+            'text': data['comment'],
+            'time': datetime.now().strftime('%Y-%m-%d %H:%M')
+        })
+        save_data(app_data)
+        return jsonify({'success': True})
+    return jsonify({'success': False}), 404
+
 @app.route('/api/approve/<int:id>', methods=['POST'])
 def approve_report(id):
     app_data = load_data()
@@ -1223,15 +1441,29 @@ def approve_report(id):
 
 @app.route('/api/reject/<int:id>', methods=['POST'])
 def reject_report(id):
+    data = request.json
     app_data = load_data()
-    username = session.get('username', '')
     report = next((r for r in app_data['submitted_reports'] if r['id'] == id), None)
     
     if report:
-        report['status'] = 'draft'
-        if username not in app_data['user_drafts']:
-            app_data['user_drafts'][username] = []
-        app_data['user_drafts'][username].append(report)
+        # Add comment
+        if 'comments' not in report:
+            report['comments'] = []
+        report['comments'].append({
+            'author': session.get('username', ''),
+            'text': data.get('comment', 'No comment provided'),
+            'time': datetime.now().strftime('%Y-%m-%d %H:%M')
+        })
+        
+        report['status'] = 'rejected'
+        report['rejected_by'] = session.get('username', '')
+        report['rejected_at'] = datetime.now().isoformat()
+        
+        # Return to original owner's drafts
+        original_owner = report.get('original_owner', report.get('submitted_by', 'unknown'))
+        if original_owner not in app_data['user_drafts']:
+            app_data['user_drafts'][original_owner] = []
+        app_data['user_drafts'][original_owner].append(report)
         app_data['submitted_reports'] = [r for r in app_data['submitted_reports'] if r['id'] != id]
         save_data(app_data)
         return jsonify({'success': True})
@@ -1341,7 +1573,6 @@ def generate_approved_pdf(id):
     story.append(Spacer(1, 3))
     story.append(Paragraph('Electronic Signature - Valid as original', styles['Normal']))
     
-    # Add approval stamp
     story.append(Spacer(1, 20))
     story.append(Paragraph(f"✅ APPROVED by {report.get('approved_by', 'Supervisor')} on {report.get('approved_at', '')[:10]}", header_style))
     
@@ -1353,6 +1584,16 @@ def generate_approved_pdf(id):
     doc.build(story)
     buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=f"{report['member_name'].replace(' ', '_')}_Approved_{report['service_date']}.pdf")
+
+@app.route('/api/report/draft/<int:id>', methods=['GET'])
+def get_draft_report(id):
+    app_data = load_data()
+    username = session.get('username', '')
+    drafts = app_data['user_drafts'].get(username, [])
+    report = next((r for r in drafts if r['id'] == id), None)
+    if report:
+        return jsonify(report)
+    return jsonify({'error': 'Not found'}), 404
 
 @app.route('/api/admin/all-configs')
 def get_all_configs():
@@ -1390,6 +1631,7 @@ if __name__ == '__main__':
     ║  Demo Accounts:                                          ║
     ║  Admin: admin / admin123                                 ║
     ║  Supervisor: supervisor / super123                       ║
+    ║  QA Staff: qa / qa123                                    ║
     ║  Staff: staff1 / staff123                                ║
     ╚══════════════════════════════════════════════════════════╝
     """)
