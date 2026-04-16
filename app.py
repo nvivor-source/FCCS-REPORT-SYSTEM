@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 FCCS - Four Corners Community Services
-Day Habilitation Service Report Platform - COMPLETE WORKING VERSION
-ALL dropdowns editable in Admin Panel + Editable ISP Outcomes
+Day Habilitation Service Report Platform - RENDER DEPLOYMENT VERSION
+Fixed: Dropdowns working, Header color changed, Remove member button added
 """
 
 import os
@@ -20,7 +20,7 @@ from reportlab.lib.units import inch
 import io
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 CORS(app)
 
 DATA_FILE = 'fccs_data.json'
@@ -58,60 +58,50 @@ MEDICATION_TYPES_LIST = ["MAR", "PRN", "Both", "N/A"]
 
 def load_data():
     if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r') as f:
-            data = json.load(f)
-            if 'mentors' not in data or not data['mentors']:
-                data['mentors'] = [{'id': i+1, 'full_name': m, 'is_active': True} for i, m in enumerate(MENTORS_LIST)]
-            if 'members' not in data or not data['members']:
-                data['members'] = [{'id': i+1, 'full_name': m, 'display_name': m.split()[0], 'date_of_birth': '', 'medicaid_id': '', 'phone': '', 'emergency_contact': '', 'address': '', 'is_active': True} for i, m in enumerate(MEMBERS_LIST)]
-            if 'locations' not in data or not data['locations']:
-                data['locations'] = [{'id': i+1, 'location_name': l, 'is_active': True} for i, l in enumerate(LOCATIONS_LIST)]
-            if 'activities' not in data or not data['activities']:
-                data['activities'] = [{'id': i+1, 'activity_name': a, 'is_active': True} for i, a in enumerate(ACTIVITIES_LIST)]
-            if 'prompt_levels' not in data or not data['prompt_levels']:
-                data['prompt_levels'] = [{'id': i+1, 'level_name': p, 'is_active': True} for i, p in enumerate(PROMPT_LEVELS_LIST)]
-            if 'task_categories' not in data or not data['task_categories']:
-                data['task_categories'] = [{'id': i+1, 'category_name': c, 'is_active': True} for i, c in enumerate(TASK_CATEGORIES_LIST)]
-            if 'unit_options' not in data or not data['unit_options']:
-                data['unit_options'] = [{'id': i+1, 'unit_value': u, 'display_text': f'{u} Units', 'is_active': True} for i, u in enumerate(UNITS_LIST)]
-            if 'strategies' not in data or not data['strategies']:
-                data['strategies'] = [{'id': i+1, 'strategy_text': s, 'is_active': True} for i, s in enumerate(STRATEGIES_LIST)]
-            if 'service_types' not in data or not data['service_types']:
-                data['service_types'] = [{'id': i+1, 'type_name': s, 'is_active': True} for i, s in enumerate(SERVICE_TYPES_LIST)]
-            if 'medication_statuses' not in data or not data['medication_statuses']:
-                data['medication_statuses'] = [{'id': i+1, 'status_name': s, 'is_active': True} for i, s in enumerate(MEDICATION_STATUS_LIST)]
-            if 'medication_types' not in data or not data['medication_types']:
-                data['medication_types'] = [{'id': i+1, 'type_name': t, 'is_active': True} for i, t in enumerate(MEDICATION_TYPES_LIST)]
-            if 'isp_outcomes' not in data:
-                data['isp_outcomes'] = []
-                for member in data['members']:
-                    data['isp_outcomes'].append({'id': len(data['isp_outcomes'])+1, 'member_id': member['id'], 'outcome_text': f"{member['full_name']} will engage in community activities and socialize with peers.", 'is_active': True})
-                    data['isp_outcomes'].append({'id': len(data['isp_outcomes'])+1, 'member_id': member['id'], 'outcome_text': f"{member['full_name']} will develop independent living skills.", 'is_active': True})
-            return data
+        try:
+            with open(DATA_FILE, 'r') as f:
+                data = json.load(f)
+        except:
+            data = {}
+    else:
+        data = {}
     
-    data = {
-        'users': [{'id': 1, 'username': 'admin', 'password': generate_password_hash('admin123'), 'role': 'admin'}],
-        'members': [{'id': i+1, 'full_name': m, 'display_name': m.split()[0], 'date_of_birth': '', 'medicaid_id': '', 'phone': '', 'emergency_contact': '', 'address': '', 'is_active': True} for i, m in enumerate(MEMBERS_LIST)],
-        'mentors': [{'id': i+1, 'full_name': m, 'is_active': True} for i, m in enumerate(MENTORS_LIST)],
-        'locations': [{'id': i+1, 'location_name': l, 'is_active': True} for i, l in enumerate(LOCATIONS_LIST)],
-        'activities': [{'id': i+1, 'activity_name': a, 'is_active': True} for i, a in enumerate(ACTIVITIES_LIST)],
-        'prompt_levels': [{'id': i+1, 'level_name': p, 'is_active': True} for i, p in enumerate(PROMPT_LEVELS_LIST)],
-        'task_categories': [{'id': i+1, 'category_name': c, 'is_active': True} for i, c in enumerate(TASK_CATEGORIES_LIST)],
-        'unit_options': [{'id': i+1, 'unit_value': u, 'display_text': f'{u} Units', 'is_active': True} for i, u in enumerate(UNITS_LIST)],
-        'strategies': [{'id': i+1, 'strategy_text': s, 'is_active': True} for i, s in enumerate(STRATEGIES_LIST)],
-        'service_types': [{'id': i+1, 'type_name': s, 'is_active': True} for i, s in enumerate(SERVICE_TYPES_LIST)],
-        'medication_statuses': [{'id': i+1, 'status_name': s, 'is_active': True} for i, s in enumerate(MEDICATION_STATUS_LIST)],
-        'medication_types': [{'id': i+1, 'type_name': t, 'is_active': True} for i, t in enumerate(MEDICATION_TYPES_LIST)],
-        'isp_outcomes': [],
-        'reports': [],
-        'next_id': 1
-    }
+    # Ensure all required keys exist with defaults
+    if 'users' not in data or not data['users']:
+        data['users'] = [{'id': 1, 'username': 'admin', 'password': generate_password_hash('admin123'), 'role': 'admin'}]
+    if 'members' not in data or not data['members']:
+        data['members'] = [{'id': i+1, 'full_name': m, 'display_name': m.split()[0], 'date_of_birth': '', 'medicaid_id': '', 'phone': '', 'emergency_contact': '', 'address': '', 'is_active': True} for i, m in enumerate(MEMBERS_LIST)]
+    if 'mentors' not in data or not data['mentors']:
+        data['mentors'] = [{'id': i+1, 'full_name': m, 'is_active': True} for i, m in enumerate(MENTORS_LIST)]
+    if 'locations' not in data or not data['locations']:
+        data['locations'] = [{'id': i+1, 'location_name': l, 'is_active': True} for i, l in enumerate(LOCATIONS_LIST)]
+    if 'activities' not in data or not data['activities']:
+        data['activities'] = [{'id': i+1, 'activity_name': a, 'is_active': True} for i, a in enumerate(ACTIVITIES_LIST)]
+    if 'prompt_levels' not in data or not data['prompt_levels']:
+        data['prompt_levels'] = [{'id': i+1, 'level_name': p, 'is_active': True} for i, p in enumerate(PROMPT_LEVELS_LIST)]
+    if 'task_categories' not in data or not data['task_categories']:
+        data['task_categories'] = [{'id': i+1, 'category_name': c, 'is_active': True} for i, c in enumerate(TASK_CATEGORIES_LIST)]
+    if 'unit_options' not in data or not data['unit_options']:
+        data['unit_options'] = [{'id': i+1, 'unit_value': u, 'display_text': f'{u} Units', 'is_active': True} for i, u in enumerate(UNITS_LIST)]
+    if 'strategies' not in data or not data['strategies']:
+        data['strategies'] = [{'id': i+1, 'strategy_text': s, 'is_active': True} for i, s in enumerate(STRATEGIES_LIST)]
+    if 'service_types' not in data or not data['service_types']:
+        data['service_types'] = [{'id': i+1, 'type_name': s, 'is_active': True} for i, s in enumerate(SERVICE_TYPES_LIST)]
+    if 'medication_statuses' not in data or not data['medication_statuses']:
+        data['medication_statuses'] = [{'id': i+1, 'status_name': s, 'is_active': True} for i, s in enumerate(MEDICATION_STATUS_LIST)]
+    if 'medication_types' not in data or not data['medication_types']:
+        data['medication_types'] = [{'id': i+1, 'type_name': t, 'is_active': True} for i, t in enumerate(MEDICATION_TYPES_LIST)]
+    if 'isp_outcomes' not in data:
+        data['isp_outcomes'] = []
+        for member in data['members']:
+            if member.get('is_active', True):
+                data['isp_outcomes'].append({'id': len(data['isp_outcomes'])+1, 'member_id': member['id'], 'outcome_text': f"{member['full_name']} will engage in community activities and socialize with peers.", 'is_active': True})
+                data['isp_outcomes'].append({'id': len(data['isp_outcomes'])+1, 'member_id': member['id'], 'outcome_text': f"{member['full_name']} will develop independent living skills.", 'is_active': True})
+    if 'reports' not in data:
+        data['reports'] = []
+    if 'next_id' not in data:
+        data['next_id'] = 1
     
-    for member in data['members']:
-        data['isp_outcomes'].append({'id': len(data['isp_outcomes'])+1, 'member_id': member['id'], 'outcome_text': f"{member['full_name']} will engage in community activities and socialize with peers.", 'is_active': True})
-        data['isp_outcomes'].append({'id': len(data['isp_outcomes'])+1, 'member_id': member['id'], 'outcome_text': f"{member['full_name']} will develop independent living skills.", 'is_active': True})
-    
-    save_data(data)
     return data
 
 def save_data(data):
@@ -173,6 +163,8 @@ MAIN_APP_TEMPLATE = '''
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: #ecf0f1; }
         .header { background: linear-gradient(135deg, #1a3a5c 0%, #2c5aa0 100%); color: white; padding: 12px 30px; display: flex; justify-content: space-between; align-items: center; }
+        .header h2 { color: white !important; }
+        .header p { color: white !important; opacity: 0.9; }
         .nav { display: flex; gap: 10px; flex-wrap: wrap; }
         .nav button { background: rgba(255,255,255,0.2); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         .nav button.active { background: white; color: #1a3a5c; }
@@ -182,7 +174,7 @@ MAIN_APP_TEMPLATE = '''
         .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
         .form-group { display: flex; flex-direction: column; }
         label { font-weight: 600; color: #34495e; margin-bottom: 5px; }
-        input, select, textarea { padding: 10px; border: 1px solid #bdc3c7; border-radius: 6px; font-size: 14px; }
+        input, select, textarea { padding: 10px; border: 1px solid #bdc3c7; border-radius: 6px; font-size: 14px; background: white; }
         button { background: #2c5aa0; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; }
         button.green { background: #27ae60; }
         button.red { background: #e74c3c; }
@@ -215,8 +207,8 @@ MAIN_APP_TEMPLATE = '''
 <body>
     <div class="header">
         <div>
-            <h2>📋 FCCS - Four Corners Community Services</h2>
-            <p style="margin:0; opacity:0.9;">Day Habilitation Service Reports</p>
+            <h2 style="color: white;">📋 FCCS - Four Corners Community Services</h2>
+            <p style="color: white; margin:0; opacity:0.9;">Day Habilitation Service Reports</p>
         </div>
         <div class="nav">
             <button onclick="showSection('new')" id="navNew" class="active">New Report</button>
@@ -315,7 +307,6 @@ MAIN_APP_TEMPLATE = '''
         </div>
     </div>
     
-    <!-- ISP Outcomes Modal -->
     <div class="modal-overlay" id="outcomesModalOverlay" onclick="closeOutcomesModal()"></div>
     <div class="modal" id="outcomesModal">
         <h3>Edit ISP Outcomes</h3>
@@ -382,6 +373,7 @@ MAIN_APP_TEMPLATE = '''
                 allData.medicationStatuses = responses[9].data.filter(s => s.is_active);
                 allData.medicationTypes = responses[10].data.filter(t => t.is_active);
                 
+                // Populate all dropdowns
                 populateSelect('memberId', allData.members, 'id', 'full_name');
                 populateSelect('mentorId', allData.mentors, 'id', 'full_name');
                 populateSelect('locationId', allData.locations, 'id', 'location_name');
@@ -392,7 +384,7 @@ MAIN_APP_TEMPLATE = '''
                 
                 calculateUnits();
                 updateSignaturePreview();
-            } catch (e) { console.error('Error:', e); }
+            } catch (e) { console.error('Error loading data:', e); }
         }
         
         function populateSelect(id, items, valueKey, labelKey) {
@@ -560,9 +552,20 @@ MAIN_APP_TEMPLATE = '''
         
         async function loadMembersList() {
             const response = await fetch('/api/members'); const data = await response.json();
-            document.getElementById('membersList').innerHTML = `<table><tr><th>Name</th><th>DOB</th><th>Medicaid</th><th>ISP Outcomes</th></tr>
+            document.getElementById('membersList').innerHTML = `<table><tr><th>Name</th><th>DOB</th><th>Medicaid</th><th>Actions</th></tr>
                 ${data.data.filter(m => m.is_active).map(m => `<tr><td>${m.full_name}</td><td>${m.date_of_birth || '-'}</td><td>${m.medicaid_id || '-'}</td>
-                <td><button onclick="openOutcomesModal(${m.id}, '${m.full_name}')" class="orange">Edit Outcomes</button></td></tr>`).join('')}</table>`;
+                <td style="display:flex; gap:5px;">
+                    <button onclick="openOutcomesModal(${m.id}, '${m.full_name}')" class="orange">Edit Outcomes</button>
+                    <button onclick="removeMember(${m.id}, '${m.full_name}')" class="red">Remove</button>
+                </td></tr>`).join('')}</table>`;
+        }
+        
+        async function removeMember(memberId, memberName) {
+            if (!confirm(`Are you sure you want to remove ${memberName}?`)) return;
+            await fetch(`/api/members/${memberId}/deactivate`, { method: 'PUT' });
+            alert('Member removed!');
+            loadMembersList();
+            loadAllData();
         }
         
         async function openOutcomesModal(memberId, memberName) {
@@ -731,6 +734,16 @@ def update_member(id):
     for m in app_data['members']:
         if m['id'] == id:
             m.update(data)
+            save_data(app_data)
+            return jsonify({'success': True})
+    return jsonify({'success': False}), 404
+
+@app.route('/api/members/<int:id>/deactivate', methods=['PUT'])
+def deactivate_member(id):
+    app_data = load_data()
+    for m in app_data['members']:
+        if m['id'] == id:
+            m['is_active'] = False
             save_data(app_data)
             return jsonify({'success': True})
     return jsonify({'success': False}), 404
@@ -959,15 +972,13 @@ def save_admin_config(key):
     return jsonify({'success': True})
 
 if __name__ == '__main__':
-    print("""
+    port = int(os.environ.get('PORT', 5000))
+    print(f"""
     ╔══════════════════════════════════════════════════════════╗
     ║     📋 FCCS - Four Corners Community Services 📋          ║
     ╠══════════════════════════════════════════════════════════╣
-    ║  Server: http://localhost:5000                           ║
+    ║  Server running on port {port}                           ║
     ║  Login:  admin / admin123                                ║
-    ║                                                          ║
-    ║  ✅ ALL dropdowns editable in Admin Panel                ║
-    ║  ✅ ISP Outcomes fully editable per member               ║
     ╚══════════════════════════════════════════════════════════╝
     """)
-    app.run(debug=False, threaded=False, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=port)
